@@ -56,12 +56,12 @@
       filter: drop-shadow(0 2px 5px rgba(0,0,0,0.7));
     }
 
-    .popup { min-width: 230px; font-size: 13px; line-height: 1.55; }
+    .popup { min-width: 240px; font-size: 13px; line-height: 1.55; }
     .popup b { color: #0284c7; font-size: 15px; }
 
     .plane-card {
       width: 100%;
-      height: 120px;
+      height: 125px;
       border-radius: 12px;
       margin: 8px 0;
       display: flex;
@@ -72,6 +72,15 @@
       font-size: 14px;
       text-align: center;
       padding: 10px;
+    }
+
+    .plane-img {
+      width: 100%;
+      height: 125px;
+      object-fit: cover;
+      border-radius: 12px;
+      margin: 8px 0;
+      background: #e2e8f0;
     }
 
     .search-link {
@@ -97,7 +106,7 @@
 
   <section class="panel">
     <h1>✈️ Sky Radar</h1>
-    <p>전 세계 항공기를 지도에 표시합니다. 10초마다 갱신되고, 비행기는 부드럽게 이동합니다.</p>
+    <p>10초마다 새 데이터를 받고, 비행기는 9초 동안 부드럽게 이동합니다.</p>
 
     <div class="stats">
       <div class="stat">
@@ -158,7 +167,10 @@
     const aircraftLayer = L.layerGroup().addTo(map);
     const airportLayer = L.layerGroup().addTo(map);
     const aircraftMarkers = new Map();
+    const aircraftImageCache = new Map();
+
     let airportsVisible = true;
+    let isLoadingAircraft = false;
 
     const planeCountEl = document.getElementById("planeCount");
     const lastUpdateEl = document.getElementById("lastUpdate");
@@ -290,33 +302,126 @@
       return plane.hex || plane.icao || plane.icao24 || plane.flight || plane.callsign || `${plane.lat}-${plane.lon}`;
     }
 
+    function getPlaneFields(plane) {
+      return {
+        callsign: plane.flight || plane.callsign || plane.call || "호출부호 없음",
+        altitude: plane.alt_baro || plane.alt_geom || plane.altitude || "-",
+        speed: plane.gs || plane.speed || "-",
+        track: plane.track || plane.heading || 0,
+        type: plane.t || plane.type || plane.aircraft_type || "-",
+        reg: plane.r || plane.reg || plane.registration || "-",
+        hex: plane.hex || plane.icao || plane.icao24 || "-"
+      };
+    }
+
+    function getImageKey(type, reg, hex) {
+      if (reg && reg !== "-") return reg;
+      if (type && type !== "-") return type;
+      if (hex && hex !== "-") return hex;
+      return "";
+    }
+
+    async function prefetchAircraftImage(type, reg, hex) {
+      const key = getImageKey(type, reg, hex);
+      if (!key) return;
+
+      if (aircraftImageCache.has(key)) return;
+
+      aircraftImageCache.set(key, "loading");
+
+      const terms = [
+        reg && reg !== "-" ? `${reg} aircraft` : "",
+        type && type !== "-" ? `${type} aircraft` : "",
+        type && type !== "-" ? `${type} airplane` : ""
+      ].filter(Boolean);
+
+      for (const term of terms) {
+        try {
+          const url =
+            "https://commons.wikimedia.org/w/api.php" +
+            "?action=query" +
+            "&generator=search" +
+            "&gsrnamespace=6" +
+            `&gsrsearch=${encodeURIComponent(term)}` +
+            "&prop=imageinfo" +
+            "&iiprop=url" +
+            "&iiurlwidth=420" +
+            "&format=json" +
+            "&origin=*";
+
+          const res = await fetch(url);
+          const json = await res.json();
+
+          const pages = json.query && json.query.pages
+            ? Object.values(json.query.pages)
+            : [];
+
+          const found = pages.find(p =>
+            p.imageinfo &&
+            p.imageinfo[0] &&
+            p.imageinfo[0].thumburl
+          );
+
+          if (found) {
+            aircraftImageCache.set(key, found.imageinfo[0].thumburl);
+            return;
+          }
+        } catch (e) {
+          console.warn("이미지 미리 불러오기 실패:", e);
+        }
+      }
+
+      aircraftImageCache.set(key, "none");
+    }
+
+    function prefetchVisibleAircraftImages(aircraft) {
+      const targets = aircraft.slice(0, 25);
+
+      targets.forEach((plane, index) => {
+        const { type, reg, hex } = getPlaneFields(plane);
+
+        setTimeout(() => {
+          prefetchAircraftImage(type, reg, hex);
+        }, index * 120);
+      });
+    }
+
     function buildPopup(plane) {
-      const callsign = plane.flight || plane.callsign || plane.call || "호출부호 없음";
-      const altitude = plane.alt_baro || plane.alt_geom || plane.altitude || "-";
-      const speed = plane.gs || plane.speed || "-";
-      const track = plane.track || plane.heading || 0;
-      const type = plane.t || plane.type || plane.aircraft_type || "-";
-      const reg = plane.r || plane.reg || plane.registration || "-";
-      const hex = plane.hex || plane.icao || plane.icao24 || "-";
+      const { callsign, altitude, speed, track, type, reg, hex } = getPlaneFields(plane);
+      const key = getImageKey(type, reg, hex);
+      const cachedImage = aircraftImageCache.get(key);
+
+      let imageHtml = `<div class="plane-card">✈️<br>이미지 준비 중<br>${type !== "-" ? type : ""}</div>`;
+
+      if (cachedImage && cachedImage !== "loading" && cachedImage !== "none") {
+        imageHtml = `<img class="plane-img" src="${cachedImage}" alt="aircraft image">`;
+      }
+
+      if (cachedImage === "none") {
+        imageHtml = `<div class="plane-card">✈️<br>이미지 없음<br>${type !== "-" ? type : ""}</div>`;
+      }
 
       const query = encodeURIComponent(`${type !== "-" ? type : ""} ${reg !== "-" ? reg : ""} aircraft`);
 
       return `
         <div class="popup">
           <b>${String(callsign).trim()}</b>
-          <div class="plane-card">✈️<br>${type !== "-" ? type : "항공기 정보"}</div>
+          ${imageHtml}
           ICAO: ${hex}<br>
           기종: ${type}<br>
           등록번호: ${reg}<br>
           고도: ${formatNumber(altitude)} ft<br>
           속도: ${formatNumber(speed)} kt<br>
           방향: ${formatNumber(track)}°<br>
-          <a class="search-link" href="https://www.google.com/search?tbm=isch&q=${query}" target="_blank">기체 이미지 바로 보기</a>
+          <a class="search-link" href="https://www.google.com/search?tbm=isch&q=${query}" target="_blank">이미지 검색</a>
         </div>
       `;
     }
 
     async function loadAircraft() {
+      if (isLoadingAircraft) return;
+      isLoadingAircraft = true;
+
       const center = map.getCenter();
       const radius = Math.min(getRadiusByZoom(), 250);
 
@@ -372,14 +477,14 @@
         const id = String(getPlaneId(plane));
         seenIds.add(id);
 
-        const track = plane.track || plane.heading || 0;
+        const { track } = getPlaneFields(plane);
         const newLatLng = L.latLng(pLat, pLon);
 
         let marker = aircraftMarkers.get(id);
 
         if (marker) {
           const oldLatLng = marker.getLatLng();
-          animateMarker(marker, oldLatLng, newLatLng);
+          animateMarker(marker, oldLatLng, newLatLng, 9000);
           marker.setIcon(createPlaneIcon(track));
           marker.setPopupContent(buildPopup(plane));
         } else {
@@ -399,6 +504,8 @@
         }
       });
 
+      prefetchVisibleAircraftImages(aircraft);
+
       planeCountEl.textContent = visibleCount;
       lastUpdateEl.textContent = new Date().toLocaleTimeString("ko-KR", {
         hour: "2-digit",
@@ -406,10 +513,12 @@
       });
 
       if (visibleCount > 0) {
-        statusEl.textContent = `완료. ${visibleCount}대 항공기를 표시했습니다. 연결 방식: ${successUrl}`;
+        statusEl.textContent = `완료. ${visibleCount}대 표시 중. 9초 이동 후 1초 대기합니다. 연결: ${successUrl}`;
       } else {
         statusEl.textContent = `항공기 데이터를 표시하지 못했습니다. 마지막 오류: ${lastError}`;
       }
+
+      isLoadingAircraft = false;
     }
 
     function moveTo(lat, lon, zoom) {
@@ -443,10 +552,16 @@
       statusEl.textContent = "지도를 이동했습니다. 새로고침을 누르면 이 지역 항공기를 다시 불러옵니다.";
     });
 
-    addAirports();
-    loadAircraft();
+    async function startLiveTracking() {
+      await loadAircraft();
 
-    setInterval(loadAircraft, 10000);
+      setInterval(() => {
+        loadAircraft();
+      }, 10000);
+    }
+
+    addAirports();
+    startLiveTracking();
   </script>
 </body>
 </html>
