@@ -9,89 +9,41 @@
 
   <style>
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #020617;
-      color: white;
-    }
+    body { margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #020617; color: white; }
     #map { width: 100vw; height: 100vh; }
 
     .panel {
-      position: fixed;
-      top: 16px;
-      left: 16px;
-      z-index: 999;
-      width: 365px;
-      max-width: calc(100vw - 32px);
-      padding: 16px;
-      border-radius: 22px;
+      position: fixed; top: 16px; left: 16px; z-index: 999;
+      width: 365px; max-width: calc(100vw - 32px);
+      padding: 16px; border-radius: 22px;
       background: rgba(15, 23, 42, 0.92);
       backdrop-filter: blur(14px);
       box-shadow: 0 20px 50px rgba(0,0,0,0.4);
-      max-height: calc(100vh - 32px);
-      overflow-y: auto;
+      max-height: calc(100vh - 32px); overflow-y: auto;
     }
 
     h1 { margin: 0 0 6px; font-size: 22px; }
     p { margin: 0 0 12px; font-size: 13px; color: #cbd5e1; line-height: 1.5; }
 
-    .stats {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .stat { padding: 10px; border-radius: 14px; background: rgba(30,41,59,0.92); }
+    .stat b { display: block; font-size: 19px; color: #38bdf8; }
+    .stat span { font-size: 12px; color: #94a3b8; }
 
-    .stat {
-      padding: 10px;
-      border-radius: 14px;
-      background: rgba(30,41,59,0.92);
-    }
-
-    .stat b {
-      display: block;
-      font-size: 19px;
-      color: #38bdf8;
-    }
-
-    .stat span {
-      font-size: 12px;
-      color: #94a3b8;
-    }
-
-    .section-title {
-      margin: 12px 0 8px;
-      font-size: 13px;
-      color: #bae6fd;
-      font-weight: 700;
-    }
-
-    .buttons {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
+    .section-title { margin: 12px 0 8px; font-size: 13px; color: #bae6fd; font-weight: 700; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 
     button {
       border: 1px solid rgba(148,163,184,0.3);
-      background: #0f172a;
-      color: #e2e8f0;
-      padding: 9px 11px;
-      border-radius: 999px;
-      cursor: pointer;
-      font-size: 13px;
+      background: #0f172a; color: #e2e8f0;
+      padding: 9px 11px; border-radius: 999px;
+      cursor: pointer; font-size: 13px;
     }
 
     button:hover { background: #1e293b; }
     .primary { background: #0284c7; border-color: #38bdf8; color: white; }
 
-    .status {
-      margin-top: 10px;
-      font-size: 12px;
-      color: #94a3b8;
-      line-height: 1.5;
-    }
+    .status { margin-top: 10px; font-size: 12px; color: #94a3b8; line-height: 1.5; }
 
     .plane-icon {
       font-size: 23px;
@@ -104,29 +56,12 @@
       filter: drop-shadow(0 2px 5px rgba(0,0,0,0.7));
     }
 
-    .popup {
-      min-width: 230px;
-      font-size: 13px;
-      line-height: 1.55;
-    }
+    .popup { min-width: 230px; font-size: 13px; line-height: 1.55; }
+    .popup b { color: #0284c7; font-size: 15px; }
 
-    .popup b {
-      color: #0284c7;
-      font-size: 15px;
-    }
-
-    .plane-img {
+    .plane-card {
       width: 100%;
-      height: 135px;
-      object-fit: cover;
-      border-radius: 12px;
-      margin: 8px 0;
-      background: #e2e8f0;
-    }
-
-    .img-loading {
-      width: 100%;
-      height: 135px;
+      height: 120px;
       border-radius: 12px;
       margin: 8px 0;
       display: flex;
@@ -134,24 +69,25 @@
       justify-content: center;
       background: linear-gradient(135deg, #0f172a, #1e293b);
       color: #cbd5e1;
-      font-size: 12px;
+      font-size: 14px;
+      text-align: center;
+      padding: 10px;
     }
 
     .search-link {
       display: inline-block;
-      margin-top: 6px;
-      color: #0284c7;
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: #0284c7;
+      color: white;
       text-decoration: none;
       font-weight: 700;
+      font-size: 12px;
     }
 
     @media (max-width: 640px) {
-      .panel {
-        top: 10px;
-        left: 10px;
-        right: 10px;
-        width: auto;
-      }
+      .panel { top: 10px; left: 10px; right: 10px; width: auto; }
     }
   </style>
 </head>
@@ -161,7 +97,7 @@
 
   <section class="panel">
     <h1>✈️ Sky Radar</h1>
-    <p>전 세계 항공기를 지도에 표시합니다. 새 데이터가 들어오면 비행기가 부드럽게 이동합니다.</p>
+    <p>전 세계 항공기를 지도에 표시합니다. 10초마다 갱신되고, 비행기는 부드럽게 이동합니다.</p>
 
     <div class="stats">
       <div class="stat">
@@ -240,7 +176,6 @@
       ["울산공항", 35.5935, 129.3517, "USN"],
       ["포항경주공항", 35.9879, 129.4204, "KPO"],
       ["양양국제공항", 38.0613, 128.6692, "YNY"],
-
       ["도쿄 하네다", 35.5494, 139.7798, "HND"],
       ["도쿄 나리타", 35.7720, 140.3929, "NRT"],
       ["오사카 간사이", 34.4347, 135.2440, "KIX"],
@@ -331,7 +266,7 @@
       return await response.json();
     }
 
-    function animateMarker(marker, from, to, duration = 2200) {
+    function animateMarker(marker, from, to, duration = 9000) {
       const start = performance.now();
 
       function step(now) {
@@ -363,70 +298,22 @@
       const type = plane.t || plane.type || plane.aircraft_type || "-";
       const reg = plane.r || plane.reg || plane.registration || "-";
       const hex = plane.hex || plane.icao || plane.icao24 || "-";
-      const imgId = `img-${String(hex).replace(/[^a-zA-Z0-9]/g, "")}`;
-      const query = encodeURIComponent(`${type !== "-" ? type : ""} ${reg !== "-" ? reg : ""} aircraft`);
 
-      setTimeout(() => loadAircraftImage(imgId, type, reg), 150);
+      const query = encodeURIComponent(`${type !== "-" ? type : ""} ${reg !== "-" ? reg : ""} aircraft`);
 
       return `
         <div class="popup">
           <b>${String(callsign).trim()}</b>
-          <div id="${imgId}" class="img-loading">기체 이미지 검색 중...</div>
+          <div class="plane-card">✈️<br>${type !== "-" ? type : "항공기 정보"}</div>
           ICAO: ${hex}<br>
           기종: ${type}<br>
           등록번호: ${reg}<br>
           고도: ${formatNumber(altitude)} ft<br>
           속도: ${formatNumber(speed)} kt<br>
           방향: ${formatNumber(track)}°<br>
-          <a class="search-link" href="https://www.google.com/search?tbm=isch&q=${query}" target="_blank">이미지 더 보기</a>
+          <a class="search-link" href="https://www.google.com/search?tbm=isch&q=${query}" target="_blank">기체 이미지 바로 보기</a>
         </div>
       `;
-    }
-
-    async function loadAircraftImage(targetId, type, reg) {
-      const el = document.getElementById(targetId);
-      if (!el) return;
-
-      const terms = [
-        `${reg} aircraft`,
-        `${type} aircraft`,
-        `${type} airplane`
-      ].filter(q => q && !q.includes("-"));
-
-      for (const term of terms) {
-        try {
-          const url =
-            "https://commons.wikimedia.org/w/api.php" +
-            "?action=query" +
-            "&generator=search" +
-            "&gsrnamespace=6" +
-            `&gsrsearch=${encodeURIComponent(term)}` +
-            "&prop=imageinfo" +
-            "&iiprop=url" +
-            "&iiurlwidth=420" +
-            "&format=json" +
-            "&origin=*";
-
-          const res = await fetch(url);
-          const json = await res.json();
-          const pages = json.query && json.query.pages ? Object.values(json.query.pages) : [];
-
-          const found = pages.find(p =>
-            p.imageinfo &&
-            p.imageinfo[0] &&
-            p.imageinfo[0].thumburl
-          );
-
-          if (found) {
-            el.outerHTML = `<img class="plane-img" src="${found.imageinfo[0].thumburl}" alt="aircraft image">`;
-            return;
-          }
-        } catch (e) {
-          console.warn("이미지 검색 실패:", e);
-        }
-      }
-
-      el.innerHTML = "이미지 없음";
     }
 
     async function loadAircraft() {
@@ -559,7 +446,7 @@
     addAirports();
     loadAircraft();
 
-    setInterval(loadAircraft, 30000);
+    setInterval(loadAircraft, 10000);
   </script>
 </body>
 </html>
