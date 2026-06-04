@@ -275,42 +275,58 @@
       return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
     }
 
-    async function fetchJsonFast(url, timeoutMs = 4200) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+    async function fetchJsonFast(url, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-      try {
-        const response = await fetch(url, {
-          signal: controller.signal,
-          cache: "no-store"
-        });
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      cache: "no-store"
+    });
 
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
-      } finally {
-        clearTimeout(timer);
-      }
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
     async function fetchFirstAircraftData(rawUrls) {
-      const candidates = [];
+  const directCandidates = rawUrls.map(url => ({
+    label: "직접 API",
+    url
+  }));
 
-      rawUrls.forEach(url => {
-        candidates.push({ label: "직접 API", url });
-        candidates.push({ label: "프록시 API", url: proxyUrl(url) });
-      });
+  const proxyCandidates = rawUrls.map(url => ({
+    label: "프록시 API",
+    url: proxyUrl(url)
+  }));
 
-      const tasks = candidates.map(source =>
-        fetchJsonFast(source.url)
-          .then(json => {
-            const list = normalizeAircraft(json);
-            if (!list.length) throw new Error("빈 항공기 목록");
-            return { list, label: source.label };
-          })
-      );
+  const candidates = [...directCandidates, ...proxyCandidates];
 
-      return Promise.any(tasks);
+  let lastError = "";
+
+  for (const source of candidates) {
+    try {
+      const json = await fetchJsonFast(source.url, source.label === "프록시 API" ? 12000 : 6000);
+      const list = normalizeAircraft(json);
+
+      if (list.length > 0) {
+        return {
+          list,
+          label: source.label
+        };
+      }
+
+      lastError = "빈 항공기 목록";
+    } catch (error) {
+      lastError = error.message || "Failed to fetch";
     }
+  }
+
+  throw new Error(lastError || "모든 API 실패");
+}
 
     function animateMarker(marker, from, to, duration = 9000) {
       const start = performance.now();
