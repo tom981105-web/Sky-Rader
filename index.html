@@ -221,67 +221,70 @@
     }
 
     async function loadAircraft() {
-  const bounds = map.getBounds();
-
-  const lamin = bounds.getSouth().toFixed(4);
-  const lomin = bounds.getWest().toFixed(4);
-  const lamax = bounds.getNorth().toFixed(4);
-  const lomax = bounds.getEast().toFixed(4);
+  const center = map.getCenter();
+  const radius = getRadiusByZoom();
 
   statusEl.textContent = "항공기 데이터 불러오는 중...";
 
-  const url = `https://opensky-network.org/api/states/all?lamin=${lamin}&lomin=${lomin}&lamax=${lamax}&lomax=${lomax}`;
+  const urls = [
+    `https://api.adsb.lol/v2/point/${center.lat.toFixed(4)}/${center.lng.toFixed(4)}/${radius}`,
+    `https://api.adsb.fi/v2/lat/${center.lat.toFixed(4)}/lon/${center.lng.toFixed(4)}/dist/${radius}`,
+    `https://api.adsb.one/v2/point/${center.lat.toFixed(4)}/${center.lng.toFixed(4)}/${radius}`
+  ];
 
   try {
-    const response = await fetch(url);
+    let data = null;
 
-    if (!response.ok) {
-      throw new Error("API 응답 오류");
+    for (const url of urls) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+
+        const json = await res.json();
+        if (json && Array.isArray(json.ac)) {
+          data = json;
+          break;
+        }
+      } catch (e) {
+        console.warn("API 실패:", url, e);
+      }
     }
 
-    const data = await response.json();
-    const aircraft = data.states || [];
+    if (!data) {
+      throw new Error("모든 항공기 API 실패");
+    }
+
+    const aircraft = data.ac || [];
 
     aircraftLayer.clearLayers();
 
     let visibleCount = 0;
 
     aircraft.forEach((plane) => {
-      const [
-        icao24,
-        callsign,
-        originCountry,
-        timePosition,
-        lastContact,
-        longitude,
-        latitude,
-        baroAltitude,
-        onGround,
-        velocity,
-        trueTrack,
-        verticalRate,
-        sensors,
-        geoAltitude,
-        squawk
-      ] = plane;
-
-      if (!latitude || !longitude) return;
+      if (!plane.lat || !plane.lon) return;
 
       visibleCount++;
 
-      const marker = L.marker([latitude, longitude], {
-        icon: createPlaneIcon(trueTrack || 0)
+      const callsign = plane.flight ? plane.flight.trim() : "호출부호 없음";
+      const altitude = plane.alt_baro || plane.alt_geom || "-";
+      const speed = plane.gs || "-";
+      const track = plane.track || 0;
+      const type = plane.t || "-";
+      const reg = plane.r || "-";
+
+      const marker = L.marker([plane.lat, plane.lon], {
+        icon: createPlaneIcon(track)
       }).addTo(aircraftLayer);
 
       marker.bindPopup(`
         <div class="popup">
-          <b>${callsign ? callsign.trim() : "호출부호 없음"}</b><br>
-          ICAO: ${icao24 || "-"}<br>
-          국가: ${originCountry || "-"}<br>
-          고도: ${baroAltitude ? formatNumber(Math.round(baroAltitude * 3.28084)) : "-"} ft<br>
-          속도: ${velocity ? formatNumber(Math.round(velocity * 1.94384)) : "-"} kt<br>
-          방향: ${trueTrack ? formatNumber(Math.round(trueTrack)) : "-"}°<br>
-          상태: ${onGround ? "지상" : "비행 중"}
+          <b>${callsign}</b><br>
+          ICAO: ${plane.hex || "-"}<br>
+          기종: ${type}<br>
+          등록번호: ${reg}<br>
+          고도: ${formatNumber(altitude)} ft<br>
+          속도: ${formatNumber(speed)} kt<br>
+          방향: ${formatNumber(track)}°
         </div>
       `);
     });
@@ -292,11 +295,11 @@
       minute: "2-digit"
     });
 
-    statusEl.textContent = "완료. 지도를 이동한 뒤 새로고침하면 해당 지역 항공기를 불러옵니다.";
+    statusEl.textContent = `완료. ${visibleCount}대 항공기를 표시했습니다.`;
 
   } catch (error) {
     console.error(error);
-    statusEl.textContent = "항공기 데이터를 불러오지 못했습니다. OpenSky API 제한 또는 일시 오류일 수 있습니다.";
+    statusEl.textContent = "항공기 데이터를 불러오지 못했습니다. API 제한 또는 접속 차단일 수 있습니다.";
   }
 }
 
