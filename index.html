@@ -9,44 +9,32 @@
 
   <style>
     * { box-sizing: border-box; }
-
     body {
       margin: 0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: #020617;
       color: white;
     }
-
-    #map {
-      width: 100vw;
-      height: 100vh;
-    }
+    #map { width: 100vw; height: 100vh; }
 
     .panel {
       position: fixed;
       top: 16px;
       left: 16px;
       z-index: 999;
-      width: 335px;
+      width: 365px;
       max-width: calc(100vw - 32px);
       padding: 16px;
       border-radius: 22px;
-      background: rgba(15, 23, 42, 0.9);
+      background: rgba(15, 23, 42, 0.92);
       backdrop-filter: blur(14px);
       box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
     }
 
-    h1 {
-      margin: 0 0 6px;
-      font-size: 22px;
-    }
-
-    p {
-      margin: 0 0 12px;
-      font-size: 13px;
-      color: #cbd5e1;
-      line-height: 1.5;
-    }
+    h1 { margin: 0 0 6px; font-size: 22px; }
+    p { margin: 0 0 12px; font-size: 13px; color: #cbd5e1; line-height: 1.5; }
 
     .stats {
       display: grid;
@@ -72,6 +60,13 @@
       color: #94a3b8;
     }
 
+    .section-title {
+      margin: 12px 0 8px;
+      font-size: 13px;
+      color: #bae6fd;
+      font-weight: 700;
+    }
+
     .buttons {
       display: flex;
       flex-wrap: wrap;
@@ -88,15 +83,8 @@
       font-size: 13px;
     }
 
-    button:hover {
-      background: #1e293b;
-    }
-
-    .primary {
-      background: #0284c7;
-      border-color: #38bdf8;
-      color: white;
-    }
+    button:hover { background: #1e293b; }
+    .primary { background: #0284c7; border-color: #38bdf8; color: white; }
 
     .status {
       margin-top: 10px;
@@ -106,20 +94,55 @@
     }
 
     .plane-icon {
-      font-size: 22px;
+      font-size: 23px;
       transform-origin: center;
       text-shadow: 0 2px 8px rgba(0,0,0,0.7);
     }
 
+    .airport-icon {
+      font-size: 22px;
+      filter: drop-shadow(0 2px 5px rgba(0,0,0,0.7));
+    }
+
     .popup {
-      min-width: 190px;
+      min-width: 230px;
       font-size: 13px;
-      line-height: 1.6;
+      line-height: 1.55;
     }
 
     .popup b {
       color: #0284c7;
       font-size: 15px;
+    }
+
+    .plane-img {
+      width: 100%;
+      height: 135px;
+      object-fit: cover;
+      border-radius: 12px;
+      margin: 8px 0;
+      background: #e2e8f0;
+    }
+
+    .img-loading {
+      width: 100%;
+      height: 135px;
+      border-radius: 12px;
+      margin: 8px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #cbd5e1;
+      font-size: 12px;
+    }
+
+    .search-link {
+      display: inline-block;
+      margin-top: 6px;
+      color: #0284c7;
+      text-decoration: none;
+      font-weight: 700;
     }
 
     @media (max-width: 640px) {
@@ -138,7 +161,7 @@
 
   <section class="panel">
     <h1>✈️ Sky Radar</h1>
-    <p>전 세계 항공기 위치를 지도에 표시합니다.</p>
+    <p>전 세계 항공기를 지도에 표시합니다. 새 데이터가 들어오면 비행기가 부드럽게 이동합니다.</p>
 
     <div class="stats">
       <div class="stat">
@@ -153,11 +176,32 @@
 
     <div class="buttons">
       <button class="primary" onclick="loadAircraft()">새로고침</button>
-      <button onclick="moveTo(37.4602, 126.4407, 8)">인천공항</button>
-      <button onclick="moveTo(35.5494, 139.7798, 8)">하네다</button>
-      <button onclick="moveTo(40.6413, -73.7781, 8)">뉴욕 JFK</button>
-      <button onclick="moveTo(51.4700, -0.4543, 8)">히드로</button>
+      <button onclick="toggleAirports()">공항 표시/숨김</button>
       <button onclick="goMyLocation()">내 주변</button>
+    </div>
+
+    <div class="section-title">🇰🇷 한국 공항</div>
+    <div class="buttons">
+      <button onclick="moveTo(37.4602, 126.4407, 9)">인천</button>
+      <button onclick="moveTo(37.5583, 126.7906, 10)">김포</button>
+      <button onclick="moveTo(33.5113, 126.4930, 10)">제주</button>
+      <button onclick="moveTo(35.1796, 128.9382, 10)">김해</button>
+      <button onclick="moveTo(35.8941, 128.6589, 10)">대구</button>
+      <button onclick="moveTo(36.7166, 127.4991, 10)">청주</button>
+      <button onclick="moveTo(35.1232, 126.8054, 10)">광주</button>
+      <button onclick="moveTo(34.8423, 127.6169, 10)">여수</button>
+    </div>
+
+    <div class="section-title">🌍 해외 주요 공항</div>
+    <div class="buttons">
+      <button onclick="moveTo(35.5494, 139.7798, 9)">하네다</button>
+      <button onclick="moveTo(35.7720, 140.3929, 9)">나리타</button>
+      <button onclick="moveTo(40.6413, -73.7781, 9)">뉴욕 JFK</button>
+      <button onclick="moveTo(33.9416, -118.4085, 9)">LA</button>
+      <button onclick="moveTo(51.4700, -0.4543, 9)">히드로</button>
+      <button onclick="moveTo(48.3538, 11.7861, 9)">뮌헨</button>
+      <button onclick="moveTo(25.2532, 55.3657, 9)">두바이</button>
+      <button onclick="moveTo(1.3644, 103.9915, 9)">싱가포르</button>
     </div>
 
     <div class="status" id="status">지도를 불러오는 중...</div>
@@ -166,13 +210,9 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
-    const map = L.map("map", {
-      zoomControl: false
-    }).setView([37.4602, 126.4407], 8);
+    const map = L.map("map", { zoomControl: false }).setView([37.4602, 126.4407], 8);
 
-    L.control.zoom({
-      position: "bottomright"
-    }).addTo(map);
+    L.control.zoom({ position: "bottomright" }).addTo(map);
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
@@ -180,10 +220,71 @@
     }).addTo(map);
 
     const aircraftLayer = L.layerGroup().addTo(map);
+    const airportLayer = L.layerGroup().addTo(map);
+    const aircraftMarkers = new Map();
+    let airportsVisible = true;
 
     const planeCountEl = document.getElementById("planeCount");
     const lastUpdateEl = document.getElementById("lastUpdate");
     const statusEl = document.getElementById("status");
+
+    const airports = [
+      ["인천국제공항", 37.4602, 126.4407, "ICN"],
+      ["김포국제공항", 37.5583, 126.7906, "GMP"],
+      ["제주국제공항", 33.5113, 126.4930, "CJU"],
+      ["김해국제공항", 35.1796, 128.9382, "PUS"],
+      ["대구국제공항", 35.8941, 128.6589, "TAE"],
+      ["청주국제공항", 36.7166, 127.4991, "CJJ"],
+      ["광주공항", 35.1232, 126.8054, "KWJ"],
+      ["여수공항", 34.8423, 127.6169, "RSU"],
+      ["울산공항", 35.5935, 129.3517, "USN"],
+      ["포항경주공항", 35.9879, 129.4204, "KPO"],
+      ["양양국제공항", 38.0613, 128.6692, "YNY"],
+
+      ["도쿄 하네다", 35.5494, 139.7798, "HND"],
+      ["도쿄 나리타", 35.7720, 140.3929, "NRT"],
+      ["오사카 간사이", 34.4347, 135.2440, "KIX"],
+      ["뉴욕 JFK", 40.6413, -73.7781, "JFK"],
+      ["LA 국제공항", 33.9416, -118.4085, "LAX"],
+      ["런던 히드로", 51.4700, -0.4543, "LHR"],
+      ["파리 샤를드골", 49.0097, 2.5479, "CDG"],
+      ["프랑크푸르트", 50.0379, 8.5622, "FRA"],
+      ["뮌헨", 48.3538, 11.7861, "MUC"],
+      ["두바이", 25.2532, 55.3657, "DXB"],
+      ["싱가포르 창이", 1.3644, 103.9915, "SIN"],
+      ["홍콩", 22.3080, 113.9185, "HKG"],
+      ["방콕 수완나품", 13.6900, 100.7501, "BKK"],
+      ["시드니", -33.9399, 151.1753, "SYD"]
+    ];
+
+    function addAirports() {
+      airportLayer.clearLayers();
+
+      airports.forEach(([name, lat, lon, code]) => {
+        const icon = L.divIcon({
+          html: `<div class="airport-icon">🛫</div>`,
+          className: "",
+          iconSize: [26, 26],
+          iconAnchor: [13, 13]
+        });
+
+        L.marker([lat, lon], { icon })
+          .bindPopup(`<b>${name}</b><br>공항코드: ${code}`)
+          .addTo(airportLayer);
+      });
+
+      airportLayer.addTo(map);
+    }
+
+    function toggleAirports() {
+      if (airportsVisible) {
+        map.removeLayer(airportLayer);
+        airportsVisible = false;
+      } else {
+        airportLayer.addTo(map);
+        airportsVisible = true;
+      }
+    }
 
     function getRadiusByZoom() {
       const zoom = map.getZoom();
@@ -197,26 +298,26 @@
     function formatNumber(value) {
       if (value === undefined || value === null || value === "") return "-";
       if (value === "ground") return "지상";
-      return Number(value).toLocaleString("ko-KR");
+      const n = Number(value);
+      if (Number.isNaN(n)) return value;
+      return n.toLocaleString("ko-KR");
     }
 
     function createPlaneIcon(track = 0) {
       return L.divIcon({
         html: `<div class="plane-icon" style="transform: rotate(${track}deg)">✈️</div>`,
         className: "",
-        iconSize: [28, 28],
-        iconAnchor: [14, 14]
+        iconSize: [30, 30],
+        iconAnchor: [15, 15]
       });
     }
 
     function normalizeAircraft(json) {
       if (!json) return [];
-
       if (Array.isArray(json.aircraft)) return json.aircraft;
       if (Array.isArray(json.ac)) return json.ac;
       if (Array.isArray(json.planes)) return json.planes;
       if (Array.isArray(json)) return json;
-
       return [];
     }
 
@@ -226,10 +327,106 @@
 
     async function fetchJson(url) {
       const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return await response.json();
+    }
+
+    function animateMarker(marker, from, to, duration = 2200) {
+      const start = performance.now();
+
+      function step(now) {
+        const progress = Math.min((now - start) / duration, 1);
+        const ease = progress < 0.5
+          ? 2 * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+        const lat = from.lat + (to.lat - from.lat) * ease;
+        const lng = from.lng + (to.lng - from.lng) * ease;
+
+        marker.setLatLng([lat, lng]);
+
+        if (progress < 1) requestAnimationFrame(step);
+      }
+
+      requestAnimationFrame(step);
+    }
+
+    function getPlaneId(plane) {
+      return plane.hex || plane.icao || plane.icao24 || plane.flight || plane.callsign || `${plane.lat}-${plane.lon}`;
+    }
+
+    function buildPopup(plane) {
+      const callsign = plane.flight || plane.callsign || plane.call || "호출부호 없음";
+      const altitude = plane.alt_baro || plane.alt_geom || plane.altitude || "-";
+      const speed = plane.gs || plane.speed || "-";
+      const track = plane.track || plane.heading || 0;
+      const type = plane.t || plane.type || plane.aircraft_type || "-";
+      const reg = plane.r || plane.reg || plane.registration || "-";
+      const hex = plane.hex || plane.icao || plane.icao24 || "-";
+      const imgId = `img-${String(hex).replace(/[^a-zA-Z0-9]/g, "")}`;
+      const query = encodeURIComponent(`${type !== "-" ? type : ""} ${reg !== "-" ? reg : ""} aircraft`);
+
+      setTimeout(() => loadAircraftImage(imgId, type, reg), 150);
+
+      return `
+        <div class="popup">
+          <b>${String(callsign).trim()}</b>
+          <div id="${imgId}" class="img-loading">기체 이미지 검색 중...</div>
+          ICAO: ${hex}<br>
+          기종: ${type}<br>
+          등록번호: ${reg}<br>
+          고도: ${formatNumber(altitude)} ft<br>
+          속도: ${formatNumber(speed)} kt<br>
+          방향: ${formatNumber(track)}°<br>
+          <a class="search-link" href="https://www.google.com/search?tbm=isch&q=${query}" target="_blank">이미지 더 보기</a>
+        </div>
+      `;
+    }
+
+    async function loadAircraftImage(targetId, type, reg) {
+      const el = document.getElementById(targetId);
+      if (!el) return;
+
+      const terms = [
+        `${reg} aircraft`,
+        `${type} aircraft`,
+        `${type} airplane`
+      ].filter(q => q && !q.includes("-"));
+
+      for (const term of terms) {
+        try {
+          const url =
+            "https://commons.wikimedia.org/w/api.php" +
+            "?action=query" +
+            "&generator=search" +
+            "&gsrnamespace=6" +
+            `&gsrsearch=${encodeURIComponent(term)}` +
+            "&prop=imageinfo" +
+            "&iiprop=url" +
+            "&iiurlwidth=420" +
+            "&format=json" +
+            "&origin=*";
+
+          const res = await fetch(url);
+          const json = await res.json();
+          const pages = json.query && json.query.pages ? Object.values(json.query.pages) : [];
+
+          const found = pages.find(p =>
+            p.imageinfo &&
+            p.imageinfo[0] &&
+            p.imageinfo[0].thumburl
+          );
+
+          if (found) {
+            el.outerHTML = `<img class="plane-img" src="${found.imageinfo[0].thumburl}" alt="aircraft image">`;
+            return;
+          }
+        } catch (e) {
+          console.warn("이미지 검색 실패:", e);
+        }
+      }
+
+      el.innerHTML = "이미지 없음";
     }
 
     async function loadAircraft() {
@@ -237,7 +434,6 @@
       const radius = Math.min(getRadiusByZoom(), 250);
 
       statusEl.textContent = "항공기 데이터 불러오는 중...";
-      aircraftLayer.clearLayers();
 
       const lat = center.lat.toFixed(4);
       const lon = center.lng.toFixed(4);
@@ -250,7 +446,6 @@
       ];
 
       const urls = [];
-
       rawUrls.forEach(url => {
         urls.push(url);
         urls.push(proxyUrl(url));
@@ -262,12 +457,8 @@
 
       for (const url of urls) {
         try {
-          console.log("API 시도:", url);
-
           const json = await fetchJson(url);
           const list = normalizeAircraft(json);
-
-          console.log("API 응답:", json);
 
           if (list.length > 0) {
             aircraft = list;
@@ -275,46 +466,50 @@
             break;
           }
 
-          lastError = "응답은 받았지만 항공기 목록이 비어 있음";
+          lastError = "항공기 목록이 비어 있음";
         } catch (error) {
-          console.warn("API 실패:", url, error);
           lastError = error.message || "Failed to fetch";
         }
       }
 
+      const seenIds = new Set();
       let visibleCount = 0;
 
       aircraft.forEach(plane => {
-        const lat = plane.lat ?? plane.latitude;
-        const lon = plane.lon ?? plane.lng ?? plane.longitude;
-
-        if (!lat || !lon) return;
+        const pLat = plane.lat ?? plane.latitude;
+        const pLon = plane.lon ?? plane.lng ?? plane.longitude;
+        if (!pLat || !pLon) return;
 
         visibleCount++;
 
-        const callsign = plane.flight || plane.callsign || plane.call || "호출부호 없음";
-        const altitude = plane.alt_baro || plane.alt_geom || plane.altitude || "-";
-        const speed = plane.gs || plane.speed || "-";
+        const id = String(getPlaneId(plane));
+        seenIds.add(id);
+
         const track = plane.track || plane.heading || 0;
-        const type = plane.t || plane.type || "-";
-        const reg = plane.r || plane.reg || "-";
-        const hex = plane.hex || plane.icao || plane.icao24 || "-";
+        const newLatLng = L.latLng(pLat, pLon);
 
-        const marker = L.marker([lat, lon], {
-          icon: createPlaneIcon(track)
-        }).addTo(aircraftLayer);
+        let marker = aircraftMarkers.get(id);
 
-        marker.bindPopup(`
-          <div class="popup">
-            <b>${String(callsign).trim()}</b><br>
-            ICAO: ${hex}<br>
-            기종: ${type}<br>
-            등록번호: ${reg}<br>
-            고도: ${formatNumber(altitude)} ft<br>
-            속도: ${formatNumber(speed)} kt<br>
-            방향: ${formatNumber(track)}°
-          </div>
-        `);
+        if (marker) {
+          const oldLatLng = marker.getLatLng();
+          animateMarker(marker, oldLatLng, newLatLng);
+          marker.setIcon(createPlaneIcon(track));
+          marker.setPopupContent(buildPopup(plane));
+        } else {
+          marker = L.marker(newLatLng, {
+            icon: createPlaneIcon(track)
+          }).addTo(aircraftLayer);
+
+          marker.bindPopup(buildPopup(plane));
+          aircraftMarkers.set(id, marker);
+        }
+      });
+
+      aircraftMarkers.forEach((marker, id) => {
+        if (!seenIds.has(id)) {
+          aircraftLayer.removeLayer(marker);
+          aircraftMarkers.delete(id);
+        }
       });
 
       planeCountEl.textContent = visibleCount;
@@ -347,7 +542,7 @@
         position => {
           const lat = position.coords.latitude;
           const lon = position.coords.longitude;
-          map.setView([lat, lon], 8);
+          map.setView([lat, lon], 9);
           loadAircraft();
         },
         () => {
@@ -361,9 +556,10 @@
       statusEl.textContent = "지도를 이동했습니다. 새로고침을 누르면 이 지역 항공기를 다시 불러옵니다.";
     });
 
+    addAirports();
     loadAircraft();
 
-    setInterval(loadAircraft, 120000);
+    setInterval(loadAircraft, 30000);
   </script>
 </body>
 </html>
