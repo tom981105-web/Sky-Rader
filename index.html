@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Sky Radar - 실시간 항공기 지도</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #020617;
+      color: #fff;
+    }
+
+    #map {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .panel {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 999;
+      width: 320px;
+      max-width: calc(100vw - 32px);
+      padding: 16px;
+      border-radius: 20px;
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    }
+
+    .panel h1 {
+      margin: 0 0 6px;
+      font-size: 22px;
+    }
+
+    .panel p {
+      margin: 0 0 12px;
+      color: #cbd5e1;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .stat {
+      padding: 10px;
+      border-radius: 14px;
+      background: rgba(30, 41, 59, 0.9);
+    }
+
+    .stat b {
+      display: block;
+      font-size: 18px;
+      color: #38bdf8;
+    }
+
+    .stat span {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    button {
+      border: 0;
+      padding: 9px 11px;
+      border-radius: 999px;
+      background: #0f172a;
+      color: #e2e8f0;
+      cursor: pointer;
+      font-size: 13px;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+    }
+
+    button:hover {
+      background: #1e293b;
+    }
+
+    .primary {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: white;
+    }
+
+    .status {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .plane-icon {
+      font-size: 22px;
+      transform-origin: center;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+    }
+
+    .popup {
+      min-width: 190px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .popup b {
+      color: #0284c7;
+      font-size: 15px;
+    }
+
+    @media (max-width: 640px) {
+      .panel {
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        width: auto;
+        padding: 14px;
+      }
+
+      .panel h1 {
+        font-size: 19px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+
+  <section class="panel">
+    <h1>✈️ Sky Radar</h1>
+    <p>현재 지도 주변의 실시간 항공기를 표시합니다.</p>
+
+    <div class="stats">
+      <div class="stat">
+        <b id="planeCount">0</b>
+        <span>표시 항공기</span>
+      </div>
+      <div class="stat">
+        <b id="lastUpdate">-</b>
+        <span>마지막 갱신</span>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button class="primary" onclick="loadAircraft()">새로고침</button>
+      <button onclick="moveTo(37.5665, 126.9780, 7)">한국</button>
+      <button onclick="moveTo(35.6895, 139.6917, 7)">일본</button>
+      <button onclick="moveTo(40.7128, -74.0060, 7)">뉴욕</button>
+      <button onclick="moveTo(51.5072, -0.1276, 7)">런던</button>
+      <button onclick="goMyLocation()">내 주변</button>
+    </div>
+
+    <div class="status" id="status">지도를 불러오는 중...</div>
+  </section>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    const map = L.map("map", {
+      zoomControl: false
+    }).setView([37.5665, 126.9780], 6);
+
+    L.control.zoom({
+      position: "bottomright"
+    }).addTo(map);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    const aircraftLayer = L.layerGroup().addTo(map);
+
+    const planeCountEl = document.getElementById("planeCount");
+    const lastUpdateEl = document.getElementById("lastUpdate");
+    const statusEl = document.getElementById("status");
+
+    function getRadiusByZoom() {
+      const zoom = map.getZoom();
+
+      if (zoom <= 4) return 250;
+      if (zoom <= 6) return 180;
+      if (zoom <= 8) return 120;
+      if (zoom <= 10) return 70;
+      return 35;
+    }
+
+    function formatNumber(value) {
+      if (value === undefined || value === null || value === "") return "-";
+      return Number(value).toLocaleString("ko-KR");
+    }
+
+    function createPlaneIcon(track = 0) {
+      return L.divIcon({
+        html: `<div class="plane-icon" style="transform: rotate(${track}deg)">✈️</div>`,
+        className: "",
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      });
+    }
+
+    async function loadAircraft() {
+      const center = map.getCenter();
+      const radius = getRadiusByZoom();
+
+      statusEl.textContent = `항공기 데이터 불러오는 중... 반경 ${radius}nm`;
+
+      const url = `https://api.adsb.lol/v2/lat/${center.lat.toFixed(4)}/lon/${center.lng.toFixed(4)}/dist/${radius}`;
+
+      try {
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          throw new Error("API 응답 오류");
+        }
+
+        const data = await response.json();
+        const aircraft = data.ac || [];
+
+        aircraftLayer.clearLayers();
+
+        let visibleCount = 0;
+
+        aircraft.forEach((plane) => {
+          if (!plane.lat || !plane.lon) return;
+
+          visibleCount++;
+
+          const callsign = plane.flight ? plane.flight.trim() : "호출부호 없음";
+          const altitude = plane.alt_baro || plane.alt_geom || "-";
+          const speed = plane.gs || "-";
+          const track = plane.track || 0;
+          const country = plane.r || plane.t || "-";
+
+          const marker = L.marker([plane.lat, plane.lon], {
+            icon: createPlaneIcon(track)
+          }).addTo(aircraftLayer);
+
+          marker.bindPopup(`
+            <div class="popup">
+              <b>${callsign}</b><br>
+              ICAO: ${plane.hex || "-"}<br>
+              등록/기종: ${country}<br>
+              고도: ${formatNumber(altitude)} ft<br>
+              속도: ${formatNumber(speed)} kt<br>
+              방향: ${formatNumber(track)}°<br>
+              위도: ${plane.lat}<br>
+              경도: ${plane.lon}
+            </div>
+          `);
+        });
+
+        planeCountEl.textContent = visibleCount;
+        lastUpdateEl.textContent = new Date().toLocaleTimeString("ko-KR", {
+          hour: "2-digit",
+          minute: "2-digit"
+        });
+
+        statusEl.textContent = `완료. 지도를 이동한 뒤 새로고침하면 해당 지역 항공기가 표시됩니다.`;
+
+      } catch (error) {
+        console.error(error);
+        statusEl.textContent = "항공기 데이터를 불러오지 못했습니다. 잠시 후 다시 시도하세요.";
+      }
+    }
+
+    function moveTo(lat, lon, zoom) {
+      map.setView([lat, lon], zoom);
+      setTimeout(loadAircraft, 500);
+    }
+
+    function goMyLocation() {
+      if (!navigator.geolocation) {
+        alert("이 브라우저에서는 위치 기능을 지원하지 않습니다.");
+        return;
+      }
+
+      statusEl.textContent = "현재 위치 확인 중...";
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          map.setView([lat, lon], 8);
+          loadAircraft();
+        },
+        () => {
+          alert("위치 권한을 허용해야 내 주변 항공기를 볼 수 있습니다.");
+          statusEl.textContent = "위치 권한이 거부되었습니다.";
+        }
+      );
+    }
+
+    map.on("moveend", () => {
+      statusEl.textContent = "지도를 이동했습니다. 새로고침을 누르면 이 지역 항공기를 불러옵니다.";
+    });
+
+    loadAircraft();
+
+    setInterval(loadAircraft, 30000);
+  </script>
+</body>
+</html>
