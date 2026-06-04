@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sky Radar - 실시간 항공기 지도</title>
-
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
   <style>
@@ -106,7 +105,7 @@
 
   <section class="panel">
     <h1>✈️ Sky Radar</h1>
-    <p>10초마다 새 데이터를 받고, 비행기는 9초 동안 부드럽게 이동합니다.</p>
+    <p>지도 이동 시 자동 갱신됩니다. 10초마다 새 데이터를 받고 비행기는 계속 움직입니다.</p>
 
     <div class="stats">
       <div class="stat">
@@ -120,7 +119,7 @@
     </div>
 
     <div class="buttons">
-      <button class="primary" onclick="loadAircraft()">새로고침</button>
+      <button class="primary" onclick="loadAircraft(true)">새로고침</button>
       <button onclick="toggleAirports()">공항 표시/숨김</button>
       <button onclick="goMyLocation()">내 주변</button>
     </div>
@@ -168,9 +167,13 @@
     const airportLayer = L.layerGroup().addTo(map);
     const aircraftMarkers = new Map();
     const aircraftImageCache = new Map();
+    const lastAircraftData = new Map();
 
     let airportsVisible = true;
     let isLoadingAircraft = false;
+    let moveRefreshTimer = null;
+    let liveInterval = null;
+    let predictionInterval = null;
 
     const planeCountEl = document.getElementById("planeCount");
     const lastUpdateEl = document.getElementById("lastUpdate");
@@ -272,10 +275,41 @@
       return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
     }
 
-    async function fetchJson(url) {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
+    async function fetchJsonFast(url, timeoutMs = 4200) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+      try {
+        const response = await fetch(url, {
+          signal: controller.signal,
+          cache: "no-store"
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    async function fetchFirstAircraftData(rawUrls) {
+      const candidates = [];
+
+      rawUrls.forEach(url => {
+        candidates.push({ label: "직접 API", url });
+        candidates.push({ label: "프록시 API", url: proxyUrl(url) });
+      });
+
+      const tasks = candidates.map(source =>
+        fetchJsonFast(source.url)
+          .then(json => {
+            const list = normalizeAircraft(json);
+            if (!list.length) throw new Error("빈 항공기 목록");
+            return { list, label: source.label };
+          })
+      );
+
+      return Promise.any(tasks);
     }
 
     function animateMarker(marker, from, to, duration = 9000) {
@@ -296,6 +330,43 @@
       }
 
       requestAnimationFrame(step);
+    }
+
+    function predictAircraftMovement() {
+      aircraftMarkers.forEach((marker, id) => {
+        const data = lastAircraftData.get(id);
+        if (!data) return;
+
+        const speedKt = Number(data.speed);
+        const track = Number(data.track);
+
+        if (Number.isNaN(speedKt) || Number.isNaN(track)) return;
+        if (speedKt <= 0) return;
+
+        const current = marker.getLatLng();
+        const metersPerSecond = speedKt * 0.514444;
+        const distanceMeters = metersPerSecond * 1;
+        const earthRadius = 6378137;
+
+        const lat1 = current.lat * Math.PI / 180;
+        const lon1 = current.lng * Math.PI / 180;
+        const brng = track * Math.PI / 180;
+
+        const lat2 = Math.asin(
+          Math.sin(lat1) * Math.cos(distanceMeters / earthRadius) +
+          Math.cos(lat1) * Math.sin(distanceMeters / earthRadius) * Math.cos(brng)
+        );
+
+        const lon2 = lon1 + Math.atan2(
+          Math.sin(brng) * Math.sin(distanceMeters / earthRadius) * Math.cos(lat1),
+          Math.cos(distanceMeters / earthRadius) - Math.sin(lat1) * Math.sin(lat2)
+        );
+
+        marker.setLatLng([
+          lat2 * 180 / Math.PI,
+          lon2 * 180 / Math.PI
+        ]);
+      });
     }
 
     function getPlaneId(plane) {
@@ -323,16 +394,13 @@
 
     async function prefetchAircraftImage(type, reg, hex) {
       const key = getImageKey(type, reg, hex);
-      if (!key) return;
-
-      if (aircraftImageCache.has(key)) return;
+      if (!key || aircraftImageCache.has(key)) return;
 
       aircraftImageCache.set(key, "loading");
 
       const terms = [
         reg && reg !== "-" ? `${reg} aircraft` : "",
-        type && type !== "-" ? `${type} aircraft` : "",
-        type && type !== "-" ? `${type} airplane` : ""
+        type && type !== "-" ? `${type} aircraft` : ""
       ].filter(Boolean);
 
       for (const term of terms) {
@@ -349,8 +417,7 @@
             "&format=json" +
             "&origin=*";
 
-          const res = await fetch(url);
-          const json = await res.json();
+          const json = await fetchJsonFast(url, 2500);
 
           const pages = json.query && json.query.pages
             ? Object.values(json.query.pages)
@@ -366,23 +433,16 @@
             aircraftImageCache.set(key, found.imageinfo[0].thumburl);
             return;
           }
-        } catch (e) {
-          console.warn("이미지 미리 불러오기 실패:", e);
-        }
+        } catch (e) {}
       }
 
       aircraftImageCache.set(key, "none");
     }
 
     function prefetchVisibleAircraftImages(aircraft) {
-      const targets = aircraft.slice(0, 25);
-
-      targets.forEach((plane, index) => {
+      aircraft.slice(0, 15).forEach((plane, index) => {
         const { type, reg, hex } = getPlaneFields(plane);
-
-        setTimeout(() => {
-          prefetchAircraftImage(type, reg, hex);
-        }, index * 120);
+        setTimeout(() => prefetchAircraftImage(type, reg, hex), index * 80);
       });
     }
 
@@ -418,50 +478,34 @@
       `;
     }
 
-    async function loadAircraft() {
-      if (isLoadingAircraft) return;
+    async function loadAircraft(force = false) {
+      if (isLoadingAircraft && !force) return;
       isLoadingAircraft = true;
 
       const center = map.getCenter();
       const radius = Math.min(getRadiusByZoom(), 250);
-
-      statusEl.textContent = "항공기 데이터 불러오는 중...";
-
       const lat = center.lat.toFixed(4);
       const lon = center.lng.toFixed(4);
 
+      statusEl.textContent = "항공기 데이터 빠르게 불러오는 중...";
+
       const rawUrls = [
         `https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lon}/dist/${radius}`,
-        `https://api.adsb.fi/v2/lat/${lat}/lon/${lon}/dist/${radius}`,
         `https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${radius}`,
-        `https://api.adsb.one/v2/lat/${lat}/lon/${lon}/dist/${radius}`
+        `https://api.adsb.one/v2/lat/${lat}/lon/${lon}/dist/${radius}`,
+        `https://api.adsb.fi/v2/lat/${lat}/lon/${lon}/dist/${radius}`
       ];
-
-      const urls = [];
-      rawUrls.forEach(url => {
-        urls.push(url);
-        urls.push(proxyUrl(url));
-      });
 
       let aircraft = [];
       let successUrl = "";
       let lastError = "";
 
-      for (const url of urls) {
-        try {
-          const json = await fetchJson(url);
-          const list = normalizeAircraft(json);
-
-          if (list.length > 0) {
-            aircraft = list;
-            successUrl = url.includes("allorigins") ? "프록시 API" : "직접 API";
-            break;
-          }
-
-          lastError = "항공기 목록이 비어 있음";
-        } catch (error) {
-          lastError = error.message || "Failed to fetch";
-        }
+      try {
+        const result = await fetchFirstAircraftData(rawUrls);
+        aircraft = result.list;
+        successUrl = result.label;
+      } catch (error) {
+        lastError = "모든 API 응답 실패 또는 빈 목록";
       }
 
       const seenIds = new Set();
@@ -477,19 +521,24 @@
         const id = String(getPlaneId(plane));
         seenIds.add(id);
 
-        const { track } = getPlaneFields(plane);
+        const fields = getPlaneFields(plane);
         const newLatLng = L.latLng(pLat, pLon);
+
+        lastAircraftData.set(id, {
+          speed: fields.speed,
+          track: fields.track
+        });
 
         let marker = aircraftMarkers.get(id);
 
         if (marker) {
           const oldLatLng = marker.getLatLng();
           animateMarker(marker, oldLatLng, newLatLng, 9000);
-          marker.setIcon(createPlaneIcon(track));
+          marker.setIcon(createPlaneIcon(fields.track));
           marker.setPopupContent(buildPopup(plane));
         } else {
           marker = L.marker(newLatLng, {
-            icon: createPlaneIcon(track)
+            icon: createPlaneIcon(fields.track)
           }).addTo(aircraftLayer);
 
           marker.bindPopup(buildPopup(plane));
@@ -501,6 +550,7 @@
         if (!seenIds.has(id)) {
           aircraftLayer.removeLayer(marker);
           aircraftMarkers.delete(id);
+          lastAircraftData.delete(id);
         }
       });
 
@@ -513,9 +563,9 @@
       });
 
       if (visibleCount > 0) {
-        statusEl.textContent = `완료. ${visibleCount}대 표시 중. 9초 이동 후 1초 대기합니다. 연결: ${successUrl}`;
+        statusEl.textContent = `완료. ${visibleCount}대 표시 중. 연결: ${successUrl}`;
       } else {
-        statusEl.textContent = `항공기 데이터를 표시하지 못했습니다. 마지막 오류: ${lastError}`;
+        statusEl.textContent = `항공기 데이터를 표시하지 못했습니다. ${lastError}`;
       }
 
       isLoadingAircraft = false;
@@ -523,7 +573,7 @@
 
     function moveTo(lat, lon, zoom) {
       map.setView([lat, lon], zoom);
-      setTimeout(loadAircraft, 700);
+      setTimeout(() => loadAircraft(true), 400);
     }
 
     function goMyLocation() {
@@ -539,7 +589,7 @@
           const lat = position.coords.latitude;
           const lon = position.coords.longitude;
           map.setView([lat, lon], 9);
-          loadAircraft();
+          loadAircraft(true);
         },
         () => {
           alert("위치 권한을 허용해야 내 주변 항공기를 볼 수 있습니다.");
@@ -548,16 +598,25 @@
       );
     }
 
-    map.on("moveend", () => {
-      statusEl.textContent = "지도를 이동했습니다. 새로고침을 누르면 이 지역 항공기를 다시 불러옵니다.";
+    map.on("moveend zoomend", () => {
+      clearTimeout(moveRefreshTimer);
+      statusEl.textContent = "지도 위치가 바뀌었습니다. 자동 갱신 준비 중...";
+
+      moveRefreshTimer = setTimeout(() => {
+        loadAircraft(true);
+      }, 500);
     });
 
     async function startLiveTracking() {
-      await loadAircraft();
+      await loadAircraft(true);
 
-      setInterval(() => {
+      liveInterval = setInterval(() => {
         loadAircraft();
       }, 10000);
+
+      predictionInterval = setInterval(() => {
+        predictAircraftMovement();
+      }, 1000);
     }
 
     addAirports();
