@@ -227,10 +227,10 @@
   statusEl.textContent = "항공기 데이터 불러오는 중...";
 
   const urls = [
-    `https://api.adsb.lol/v2/point/${center.lat.toFixed(4)}/${center.lng.toFixed(4)}/${radius}`,
-    `https://api.adsb.fi/v2/lat/${center.lat.toFixed(4)}/lon/${center.lng.toFixed(4)}/dist/${radius}`,
-    `https://api.adsb.one/v2/point/${center.lat.toFixed(4)}/${center.lng.toFixed(4)}/${radius}`
-  ];
+  `https://opendata.adsb.fi/api/v3/lat/${center.lat.toFixed(4)}/lon/${center.lng.toFixed(4)}/dist/${radius}`,
+  `https://api.adsb.fi/v2/lat/${center.lat.toFixed(4)}/lon/${center.lng.toFixed(4)}/dist/${radius}`,
+  `https://api.adsb.lol/v2/point/${center.lat.toFixed(4)}/${center.lng.toFixed(4)}/${radius}`
+];
 
   try {
     let data = null;
