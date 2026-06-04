@@ -228,32 +228,33 @@
 
   const urls = [
     `https://opendata.adsb.fi/api/v3/lat/${center.lat.toFixed(4)}/lon/${center.lng.toFixed(4)}/dist/${radius}`,
-    `https://api.adsb.lol/v2/point/${center.lat.toFixed(4)}/${center.lng.toFixed(4)}/${radius}`
+    `https://api.adsb.lol/v2/lat/${center.lat.toFixed(4)}/lon/${center.lng.toFixed(4)}/dist/${radius}`,
+    `https://api.adsb.one/v2/lat/${center.lat.toFixed(4)}/lon/${center.lng.toFixed(4)}/dist/${radius}`
   ];
 
   try {
     let aircraft = [];
+    let lastMessage = "";
 
     for (const url of urls) {
       try {
-        console.log("시도 중:", url);
         const res = await fetch(url);
-        console.log("응답:", res.status, url);
+        lastMessage = `응답 ${res.status}`;
 
         if (!res.ok) continue;
 
         const json = await res.json();
 
-        if (Array.isArray(json.aircraft)) {
-          aircraft = json.aircraft;
-          break;
-        }
+        console.log("API 응답:", url, json);
 
-        if (Array.isArray(json.ac)) {
-          aircraft = json.ac;
-          break;
-        }
+        if (Array.isArray(json.ac)) aircraft = json.ac;
+        else if (Array.isArray(json.aircraft)) aircraft = json.aircraft;
+        else if (Array.isArray(json.planes)) aircraft = json.planes;
+        else if (Array.isArray(json)) aircraft = json;
+
+        if (aircraft.length > 0) break;
       } catch (e) {
+        lastMessage = e.message;
         console.warn("API 실패:", url, e);
       }
     }
@@ -263,25 +264,28 @@
     let visibleCount = 0;
 
     aircraft.forEach((plane) => {
-      if (!plane.lat || !plane.lon) return;
+      const lat = plane.lat ?? plane.latitude;
+      const lon = plane.lon ?? plane.lng ?? plane.longitude;
+
+      if (!lat || !lon) return;
 
       visibleCount++;
 
-      const callsign = plane.flight ? plane.flight.trim() : "호출부호 없음";
-      const altitude = plane.alt_baro || plane.alt_geom || "-";
-      const speed = plane.gs || "-";
-      const track = plane.track || 0;
-      const type = plane.t || "-";
-      const reg = plane.r || "-";
+      const callsign = plane.flight || plane.callsign || plane.call || "호출부호 없음";
+      const altitude = plane.alt_baro || plane.alt_geom || plane.altitude || plane.baro_altitude || "-";
+      const speed = plane.gs || plane.speed || plane.velocity || "-";
+      const track = plane.track || plane.true_track || plane.heading || 0;
+      const type = plane.t || plane.type || plane.aircraft_type || "-";
+      const reg = plane.r || plane.reg || plane.registration || "-";
 
-      const marker = L.marker([plane.lat, plane.lon], {
+      const marker = L.marker([lat, lon], {
         icon: createPlaneIcon(track)
       }).addTo(aircraftLayer);
 
       marker.bindPopup(`
         <div class="popup">
-          <b>${callsign}</b><br>
-          ICAO: ${plane.hex || "-"}<br>
+          <b>${String(callsign).trim()}</b><br>
+          ICAO: ${plane.hex || plane.icao || plane.icao24 || "-"}<br>
           기종: ${type}<br>
           등록번호: ${reg}<br>
           고도: ${formatNumber(altitude)} ft<br>
@@ -298,14 +302,14 @@
     });
 
     if (visibleCount === 0) {
-      statusEl.textContent = "API 연결은 성공했지만 이 지역에 표시할 항공기가 없습니다. 일본/뉴욕/런던을 눌러보세요.";
+      statusEl.textContent = `API 응답은 받았지만 표시 가능한 좌표가 없습니다. ${lastMessage}`;
     } else {
       statusEl.textContent = `완료. ${visibleCount}대 항공기를 표시했습니다.`;
     }
 
   } catch (error) {
     console.error(error);
-    statusEl.textContent = "항공기 데이터를 불러오지 못했습니다. 잠시 후 다시 시도하세요.";
+    statusEl.textContent = "항공기 데이터를 불러오지 못했습니다.";
   }
 }
 
